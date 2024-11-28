@@ -1,3 +1,15 @@
+/**
+ * Author: Naith (Michal Raška)
+ * License: MIT
+ *
+ * This is a network load testing tool designed to stress test web servers and analyze their performance under heavy load conditions.
+ * It uses a multithreaded design to create maximum concurrent connections and supports TLS/SSL with TLSv1.2.
+ * The tool allows configurable thread counts based on system CPU cores and dynamic thread spawning for progressive load increase.
+ * It employs ultra-short timeouts for aggressive testing and keep-alive connections for sustained load.
+ *
+ * WARNING: The target addresses in this code must be changed to your intended destination before use.
+ */
+
 package com.raska;
 
 import javax.net.ssl.SSLSocket;
@@ -8,25 +20,40 @@ import java.net.InetSocketAddress;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+/**
+ * The SenderThread class implements Runnable and is responsible for creating and sending HTTP requests
+ * to the specified host and port using SSL/TLS connections.
+ */
 class SenderThread implements Runnable {
   private final String host;
   private final int port;
   private static final byte[] REQUEST;
-  private static final int SOCKET_TIMEOUT = 500; // Extrémně krátký timeout
+  private static final int SOCKET_TIMEOUT = 500; // Extremely short timeout
 
   static {
-    String req = "GET /hutni-material HTTP/1.1\r\n" +
-            "Host: pro-doma.cz.uat.blueghost.cz\r\n" +
-            "Connection: keep-alive\r\n" + // Změna na keep-alive pro větší zátěž
+    //UPDATE THIS REQUEST TO MATCH YOUR TARGET
+    String req = "GET /example HTTP/1.1\r\n" +
+            "Host: example.cz\r\n" +
+            "Connection: keep-alive\r\n" + // Change to keep-alive for higher load
             "\r\n";
     REQUEST = req.getBytes(StandardCharsets.UTF_8);
   }
 
+  /**
+   * Constructs a new SenderThread with the specified host and port.
+   *
+   * @param wwwHost the target host
+   * @param wwwPort the target port
+   */
   public SenderThread(String wwwHost, int wwwPort) {
     this.host = wwwHost;
     this.port = wwwPort;
   }
 
+  /**
+   * The run method is executed when the thread is started. It creates an SSL socket,
+   * sends HTTP requests, and handles the connection.
+   */
   public void run() {
     while (!Thread.currentThread().isInterrupted()) {
       SSLSocket s = null;
@@ -37,7 +64,6 @@ class SenderThread implements Runnable {
         s.connect(new InetSocketAddress(host, port), SOCKET_TIMEOUT);
         s.setEnabledProtocols(new String[]{"TLSv1.2"});
         s.startHandshake();
-
 
         for(int i = 0; i < 100; i++) {
           try (OutputStream out = s.getOutputStream()) {
@@ -58,38 +84,45 @@ class SenderThread implements Runnable {
   }
 }
 
+/**
+ * The Main class contains the main method which is the entry point of the application.
+ * It sets up the load testing environment and starts the threads for sending requests.
+ */
 public class Main {
   public static void main(String[] args) throws Exception {
-    String host = "pro-doma.cz.uat.blueghost.cz";
+
+    //TARGET HOST AND PORT MUST BE CHANGED TO YOUR INTENDED DESTINATION
+
+    String host = "example.cz";
     int port = 443;
 
-    // Maximální počet vláken - použijeme počet dostupných procesorů * 500
+    // Maximum number of threads - using the number of available processors * 500
     int threads = Runtime.getRuntime().availableProcessors() * 500;
 
     if (args.length > 0) {
       threads = Integer.parseInt(args[0]);
     }
 
-    // Velmi nizke casy nastavení timeoutů
+    // Very low timeout settings
     System.setProperty("sun.net.client.defaultConnectTimeout", "500");
     System.setProperty("sun.net.client.defaultReadTimeout", "500");
 
-    // Vypnutí veškerého logování
+    // Disabling all logging
     java.util.logging.LogManager.getLogManager().reset();
 
     System.out.println("Starting MAXIMUM DESTRUCTION test against: " + host);
     System.out.println("Threads: " + threads);
     System.out.println("Press Enter to stop...");
 
-    // Použití cached thread poolu pro maximální zatez
+    // Using cached thread pool for maximum load
     ExecutorService executor = Executors.newCachedThreadPool();
 
-    // Spuštění maximálního počtu vláken najednou
+    // Launching the maximum number of threads at once
     for (int i = 0; i < threads; i++) {
       executor.submit(new SenderThread(host, port));
     }
 
-    // Druhá vlna útoku - periodické přidávání nových vláken
+    // Second wave of attack - periodic addition of new threads
     Thread spawner = new Thread(() -> {
       while (!Thread.currentThread().isInterrupted()) {
         try {
@@ -102,7 +135,7 @@ public class Main {
     });
     spawner.start();
 
-    // Čekání na Enter
+    // Waiting for Enter
     System.in.read();
 
     System.out.println("Stopping the carnage...");
@@ -110,6 +143,6 @@ public class Main {
     executor.shutdownNow();
 
     System.out.println("Test stopped.");
-    System.exit(0); // Násilné ukončení
+    System.exit(0); // Forceful termination
   }
 }
